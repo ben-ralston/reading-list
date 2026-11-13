@@ -1,0 +1,46 @@
+diff --git a/lib/utils.js b/lib/utils.js
+index f1e736f1135c5154d0a7908651f5b8b78c24b51a..2859f59512a29aecfeccfe5add1ba7a4b1140868 100644
+--- a/lib/utils.js
++++ b/lib/utils.js
+@@ -2,10 +2,38 @@ const utils = module.exports = {};
+ const entities = require('entities');
+ const xml2js = require('xml2js');
+ 
++// Patched (reading-list #281, CWE-1333): the upstream regexes
++// /<(?:.|\n)*?>/gm and its block-tag sibling are O(n^2) on a run of '<' with
++// no '>', and feed content is attacker-controlled. One forward scan instead:
++// a block-level tag between two non-newline characters becomes '\n', any other
++// complete tag is removed, and a '<' with no later '>' stays text. Not
++// byte-identical to upstream around ADJACENT block tags (upstream's regex
++// consumed the following character, so 'a<p>b<p>c' gave 'a\nbc'; this gives
++// 'a\nb\nc'). Only affects contentSnippet line breaks.
++const BLOCK_TAG = /^\/?(h|br|p|ul|ol|li|blockquote|section|table|tr|div)/i;
+ utils.stripHtml = function(str) {
+-  str = str.replace(/([^\n])<\/?(h|br|p|ul|ol|li|blockquote|section|table|tr|div)(?:.|\n)*?>([^\n])/gm, '$1\n$3')
+-  str = str.replace(/<(?:.|\n)*?>/gm, '');
+-  return str;
++  const parts = [];
++  let last = ''; // last emitted char (reading a growing string's tail would flatten it each time)
++  let i = 0;
++  while (i < str.length) {
++    const lt = str.indexOf('<', i);
++    const gt = lt === -1 ? -1 : str.indexOf('>', lt + 1);
++    if (gt === -1) {
++      if (i < str.length) parts.push(str.slice(i));
++      break;
++    }
++    if (lt > i) {
++      parts.push(str.slice(i, lt));
++      last = str[lt - 1];
++    }
++    const next = gt + 1 < str.length ? str[gt + 1] : '';
++    if (BLOCK_TAG.test(str.slice(lt + 1, lt + 12)) && last && last !== '\n' && next && next !== '\n') {
++      parts.push('\n');
++      last = '\n';
++    }
++    i = gt + 1;
++  }
++  return parts.join('');
+ }
+ 
+ utils.getSnippet = function(str) {

@@ -1,0 +1,94 @@
+// save-to-reading-list.cherri
+//
+// iOS Share Sheet Shortcut for the Reading & Listening Tracker (GitHub #191).
+//
+// Appears in the Share Sheet as "Save to Reading List". Takes the shared URL
+// (falling back to shared Text), POSTs it to /api/add-entry with a bearer
+// token, and shows a notification confirming what happened.
+//
+// ONE-TIME SETUP after importing on iPhone:
+//   Replace REPLACE_WITH_SHARE_API_SECRET below (in the Authorization header)
+//   with your real SHARE_API_SECRET value. Do NOT commit the real secret.
+
+#define name Save to Reading List
+#define glyph bookmark
+#define color blue
+
+// Show up in the Share Sheet and accept links (with a plain-text fallback for
+// apps that share text containing a URL). Safari web pages coerce to their URL.
+#define from sharesheet
+#define inputs url, text
+
+// If the shortcut is somehow run with no input at all, stop cleanly rather
+// than posting an empty body.
+#define noinput stopwith "Nothing to save — share a link to add it to your Reading List."
+
+#include 'actions/scripting'
+#include 'actions/network'
+#include 'actions/web'
+#include 'actions/text'
+#include 'actions/sharing'
+
+const endpoint = "https://your-app.example.com/api/add-entry"
+
+// --- 1) Resolve the shared URL from the Share Sheet input ------------------
+// Prefer a real URL extracted from the input; fall back to the raw text so a
+// shared string containing a link (or a plain URL string) still works.
+@urls = getURLs(ShortcutInput)
+@urlCount = count(urls)
+
+@sharedInput = ""
+if urlCount == 0 {
+    // No URL in the input — use the raw shared text as-is.
+    @sharedInput = getText(ShortcutInput)
+} else {
+    @sharedInput = getFirstItem(urls)
+}
+
+// --- 2) POST the shared URL to /api/add-entry ------------------------------
+// saveRawOnFailure=true: if enrichment can't read the link, the server stores a
+// minimal "needs cleanup" item instead of failing silently.
+//
+// The body and headers must be inline dictionary literals (Shortcuts configures
+// the request payload inside the action; it can't take a whole dictionary from a
+// variable). String values still interpolate {sharedInput} normally.
+//
+// SETUP: replace REPLACE_WITH_SHARE_API_SECRET with your real SHARE_API_SECRET.
+@response = jsonRequest(endpoint, "POST", {
+    "input": "{sharedInput}",
+    "saveRawOnFailure": true
+}, {
+    "Authorization": "Bearer REPLACE_WITH_SHARE_API_SECRET",
+    "Content-Type": "application/json"
+})
+
+// --- 3) Parse the JSON response and notify ---------------------------------
+// Success shape: { success: true, action: "created"|"existing", title, author,
+//                  platform, fallback?: true }
+// Failure / non-2xx: { error: "..." } (no success flag) -> falls to the else.
+@result = getDictionary(response)
+@success = result['success']
+// Coerce to text so it can be compared with == (a raw dictionary lookup is
+// typed 'variable', which Cherri won't allow in an equality conditional).
+@action = getText(result['action'])
+@title = result['title']
+@fallback = result['fallback']
+
+if success {
+    if action == "existing" {
+        // Already in the list — nothing new was created.
+        @body = "Already in list: {title}"
+        showNotification(body, "Reading List", false)
+    } else {
+        if fallback {
+            // The link couldn't be read; saved raw for manual cleanup.
+            @body = "Saved for cleanup: {title}"
+            showNotification(body, "Reading List", true)
+        } else {
+            @body = "Saved: {title}"
+            showNotification(body, "Reading List", true)
+        }
+    }
+} else {
+    showNotification("Couldn't save to Reading List", "Reading List", false)
+}

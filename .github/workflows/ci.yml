@@ -1,0 +1,50 @@
+name: CI
+
+# PR-triggered validation so `main` can be gated by the require-ci ruleset.
+# Runs ESLint + the vitest unit suite, then the pytest suites of the Python
+# sync projects (audible-sync, substack-progress-sync — both write to the prod
+# DB daily, #264), on every PR and on pushes to main. They live in the single
+# `test` job because that is the check name the require-ci ruleset gates on.
+# Build/deploy is handled by Vercel (and `next build` needs Supabase/Anthropic
+# env), so it is intentionally not run here.
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Test
+        run: pnpm run test
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Test audible-sync
+        run: uv run --locked pytest
+        working-directory: audible-sync
+
+      - name: Test substack-progress-sync
+        run: uv run --locked pytest
+        working-directory: substack-progress-sync

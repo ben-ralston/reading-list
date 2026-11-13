@@ -1,0 +1,232 @@
+#!/bin/bash
+set -eo pipefail
+
+# Command descriptions for help output (short, one-line)
+help-for() {
+  case "$1" in
+    initialize)       echo "Set up project after cloning" ;;
+    build)            echo "Build the Next.js application" ;;
+    lint)             echo "Run ESLint on the codebase" ;;
+    test)             echo "Run the test suite" ;;
+    start)            echo "Start the production server" ;;
+    dev)              echo "Start dev server (--local-db to use local Supabase)" ;;
+    studio)           echo "Open local Supabase Studio in browser" ;;
+    db-start)         echo "Start local Supabase database" ;;
+    db-stop)          echo "Stop local Supabase database" ;;
+    db-reset)         echo "Reset local database and apply seed data" ;;
+    seed)             echo "Apply seed data to local database" ;;
+    deploy)           echo "Deploy migrations to production (with dry-run preview)" ;;
+    db-pull-prod)     echo "Pull production data into local database" ;;
+    *)                echo "" ;;
+  esac
+}
+
+# Detailed help for individual commands (./run <cmd> -h)
+help-detail() {
+  case "$1" in
+    dev)
+      cat << 'EOF'
+Usage: ./run dev [--local-db]
+
+Start the Next.js development server.
+
+Options:
+  --local-db    Use local Supabase instead of cloud DB
+                Requires: ./run db-start first
+EOF
+      ;;
+    deploy)
+      cat << 'EOF'
+Usage: ./run deploy
+
+Deploy database migrations to production Supabase.
+
+Shows a dry-run preview of pending migrations before prompting
+for confirmation to apply them.
+EOF
+      ;;
+    initialize)
+      cat << 'EOF'
+Usage: ./run initialize
+
+Set up the project after cloning or creating a new worktree.
+
+Steps performed:
+  - Install pnpm dependencies
+  - Link to Vercel project and pull environment variables
+  - Build the project
+
+For local database setup after initializing:
+  ./run db-start
+  ./run seed
+EOF
+      ;;
+    db-pull-prod)
+      cat << 'EOF'
+Usage: ./run db-pull-prod
+
+Pull production data into the local Supabase database.
+
+Steps performed:
+  1. Links to the production Supabase project
+  2. Dumps production data (data-only, no schema)
+  3. Resets the local database (applies migrations fresh)
+  4. Loads the production data into local DB
+
+Requires:
+  - Local Supabase running (./run db-start)
+  - Supabase CLI authenticated (supabase login)
+EOF
+      ;;
+    *)
+      # Simple commands without options
+      echo "Usage: ./run $1"
+      echo ""
+      help-for "$1"
+      ;;
+  esac
+}
+
+# Project setup
+run-initialize() {
+  ./scripts/initialize.sh "$@"
+}
+
+# Project commands/scripts
+run-build() {
+  pnpm run build
+}
+
+run-lint() {
+  pnpm run lint
+}
+
+run-test() {
+  pnpm run test
+}
+
+run-start() {
+  pnpm start
+}
+
+# Print one value (API_URL, DB_URL, ...) for THIS project's local Supabase stack,
+# as reported by `supabase status`. Fails if that stack is not running, so these
+# commands never fall through to some other database on the default ports.
+local-stack-value() {
+  local value
+  value=$(cd "$PROJECT_ROOT" && eval "$(supabase status -o env 2>/dev/null)" && eval "echo \"\${$1}\"")
+  if [ -z "$value" ]; then
+    echo "ERROR: this project's local Supabase stack is not running. Start it with: ./run db-start" >&2
+    return 1
+  fi
+  echo "$value"
+}
+
+run-dev() {
+  if [ "$1" = "--local-db" ]; then
+    # Override env vars to use local Supabase (these take precedence over .env.local)
+    SUPABASE_URL=$(local-stack-value API_URL) || exit 1
+    export SUPABASE_URL
+    # The standard Supabase local-development service key (iss: supabase-demo), the same
+    # on every machine running `supabase start`. It is not a secret.
+    export SUPABASE_SERVICE_ROLE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZS1kZW1vIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImV4cCI6MTk4MzgxMjk5Nn0.EGIM96RAZx35lJzdJsyH-qQwv8Hdp7fsn3W0YpN81IU"  # gitleaks:allow
+    echo "Using local database at $SUPABASE_URL"
+  fi
+
+  pnpm run dev
+}
+
+# Supabase commands
+run-db-start() {
+  echo "Starting local Supabase..."
+  supabase start
+}
+
+run-db-stop() {
+  echo "Stopping local Supabase..."
+  supabase stop
+}
+
+run-studio() {
+  echo "Opening Supabase Studio..."
+  local STUDIO
+  STUDIO=$(local-stack-value STUDIO_URL) || exit 1
+  open "$STUDIO"
+}
+
+run-deploy() {
+  # Deploy migrations to production with dry-run preview
+  local PROJECT_REF="${SUPABASE_PROJECT_REF:?Set SUPABASE_PROJECT_REF to your Supabase project ref}"
+
+  echo "Linking to Supabase project..."
+  supabase link --project-ref "$PROJECT_REF"
+
+  echo ""
+  echo "Checking migration status..."
+  supabase migration list
+
+  echo ""
+  echo "Dry-run of pending migrations:"
+  supabase db push --dry-run
+
+  echo ""
+  read -p "Deploy these migrations to production? (y/N) " confirm
+  if [ "$confirm" = "y" ] || [ "$confirm" = "Y" ]; then
+    supabase db push
+    echo "✅ Migrations deployed successfully!"
+  else
+    echo "Deployment cancelled."
+  fi
+}
+
+run-seed() {
+  # Apply seed data to this project's local database
+  local LOCAL_DB
+  LOCAL_DB=$(local-stack-value DB_URL) || exit 1
+  psql "$LOCAL_DB" -f supabase/seed.sql
+}
+
+run-db-pull-prod() {
+  local PROJECT_REF="${SUPABASE_PROJECT_REF:?Set SUPABASE_PROJECT_REF to your Supabase project ref}"
+  local LOCAL_DB
+  LOCAL_DB=$(local-stack-value DB_URL) || exit 1
+  local DUMP_FILE="/tmp/claude/prod-data.sql"
+
+  # Check local Supabase is running
+  if ! psql "$LOCAL_DB" -c "SELECT 1" >/dev/null 2>&1; then
+    echo "ERROR: Local Supabase is not running. Start it with: ./run db-start"
+    exit 1
+  fi
+
+  echo "Linking to production Supabase project..."
+  supabase link --project-ref "$PROJECT_REF"
+
+  echo ""
+  echo "Dumping production data..."
+  supabase db dump --data-only -f "$DUMP_FILE"
+  echo "Dump saved to $DUMP_FILE ($(wc -c < "$DUMP_FILE" | tr -d ' ') bytes)"
+
+  echo ""
+  echo "Resetting local database (applying migrations)..."
+  supabase db reset --no-seed
+
+  echo ""
+  echo "Loading production data into local database..."
+  psql "$LOCAL_DB" -f "$DUMP_FILE"
+
+  echo ""
+  echo "Done! Local database now has production data."
+  echo "Open Studio to inspect: ./run studio"
+}
+
+run-db-reset() {
+  # Reset database and apply seed (workaround for Supabase CLI timing issue)
+  local LOCAL_DB
+  LOCAL_DB=$(local-stack-value DB_URL) || exit 1
+  supabase db reset --no-seed
+  echo "Applying seed data..."
+  psql "$LOCAL_DB" -f supabase/seed.sql
+}
+
+PROJECT_ROOT=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+source "$PROJECT_ROOT/scripts/_cli.sh"

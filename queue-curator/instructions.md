@@ -1,0 +1,2 @@
+<!-- Example standing instructions. Invented for this sample; replace with your own. -->
+I listen more than I read, so prefer items with audio on weekdays and keep long reads for the weekend. Always include new episodes of Example Weekly Podcast. I want to see new posts from the Example Engineering Blog. The Example Community digest sends far more than I can get through: pick the two or three that look most interesting, not all of them. Order from most interested to least.

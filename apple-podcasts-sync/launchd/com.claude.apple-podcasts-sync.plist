@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>Label</key>
+	<string>com.claude.apple-podcasts-sync</string>
+	<!-- The signed runner app, not bash: Full Disk Access (needed to read the
+	     Podcasts Group Container) is granted to this app only. Build it with
+	     launchd/build-runner.sh; it execs launchd/run-sync.sh. -->
+	<key>ProgramArguments</key>
+	<array>
+		<string>/Users/YOUR_USER/.claude/ApplePodcastsSync.app/Contents/MacOS/ApplePodcastsSyncRunner</string>
+	</array>
+	<!-- Every 15 minutes (#322): "completed within one sync cycle". -->
+	<key>StartInterval</key>
+	<integer>900</integer>
+	<key>RunAtLoad</key>
+	<true/>
+	<key>StandardOutPath</key>
+	<string>/Users/YOUR_USER/.claude/logs/apple-podcasts-sync-stdout.log</string>
+	<key>StandardErrorPath</key>
+	<string>/Users/YOUR_USER/.claude/logs/apple-podcasts-sync-stderr.log</string>
+</dict>
+</plist>

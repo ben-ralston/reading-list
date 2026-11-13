@@ -1,0 +1,10 @@
+# Substack session cookie — NEVER commit. Stored as the SUBSTACK_SID
+# GitHub secret instead.
+*.sid
+.env
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

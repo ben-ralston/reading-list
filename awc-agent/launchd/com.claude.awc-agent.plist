@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  awc-agent (#317): KeepAlive daemon that hands queued "Convert with Askwho
+  Casts" requests to a Claude-in-Chrome session. Install: see ../README.md.
+  Secrets live in ~/.config/reading-list/awc-agent.env, never here.
+-->
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.claude.awc-agent</string>
+  <key>AssociatedBundleIdentifiers</key>
+  <array>
+    <string>com.claude.awc-agent</string>
+  </array>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/YOUR_USER/.claude/AwcAgent.app/Contents/MacOS/AwcAgentRunner</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>10</integer>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>/Users/YOUR_USER/.claude/logs/awc-agent.log</string>
+  <key>StandardErrorPath</key>
+  <string>/Users/YOUR_USER/.claude/logs/awc-agent-stderr.log</string>
+</dict>
+</plist>

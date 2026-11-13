@@ -1,0 +1,51 @@
+name: Audible sync
+
+# Daily Audible audiobook progress sync (#42). Fetches the library via the
+# mkb79/audible library and POSTs it to the app's /api/sync webhook. A daily
+# cadence makes GitHub Actions' cron drift irrelevant (unlike the time-sensitive
+# RSS/Spotify syncs, which run on the Cloudflare Worker).
+
+# The daily schedule is switched off in this copy: without the secrets below a
+# scheduled run fails every day. To turn it back on, set the AUDIBLE_AUTH_B64 and
+# SYNC_API_SECRET secrets and the AUDIBLE_WEBHOOK_URL variable, then add under `on:`
+#   schedule:
+#     - cron: "0 9 * * *" # daily, ~09:00 UTC
+on:
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Build and print the payload without POSTing"
+        type: boolean
+        default: false
+
+concurrency:
+  group: audible-sync
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: audible-sync
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+
+      - name: Restore auth.json from secret
+        run: printf '%s' "$AUDIBLE_AUTH_B64" | base64 --decode > auth.json
+        env:
+          AUDIBLE_AUTH_B64: ${{ secrets.AUDIBLE_AUTH_B64 }}
+
+      - name: Sync
+        run: uv run python -m audible_sync.sync ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run) && '--dry-run' || '' }}
+        env:
+          AUDIBLE_AUTH_PATH: auth.json
+          AUDIBLE_WEBHOOK_URL: ${{ vars.AUDIBLE_WEBHOOK_URL }}
+          SYNC_API_SECRET: ${{ secrets.SYNC_API_SECRET }}
+
+      - name: Remove auth.json
+        if: always()
+        run: rm -f auth.json

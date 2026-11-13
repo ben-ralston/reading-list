@@ -1,0 +1,10 @@
+# Audible device credentials — NEVER commit. Stored as the AUDIBLE_AUTH_B64
+# GitHub secret instead.
+auth.json
+*.auth.json
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/

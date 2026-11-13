@@ -1,0 +1,21 @@
+name = "reading-list-cron"
+main = "src/index.ts"
+compatibility_date = "2026-04-25"
+
+# Schedules:
+#   */15 * * * *     -> /api/cron/rss-sync         (every 15 min)
+#   5-59/15 * * * *  -> /api/cron/askwhocasts-sync (every 15 min, offset)
+#   15 * * * *       -> /api/cron/spotify-sync     (every hour at :15)
+#   0 8 * * *        -> /api/cron/substack-import  (daily at 08:00 UTC)
+[triggers]
+crons = ["*/15 * * * *", "5-59/15 * * * *", "15 * * * *", "0 8 * * *"]
+
+[vars]
+DEPLOY_URL = "https://your-app.example.com"
+
+# CRON_SECRET is set via:
+#   wrangler secret put CRON_SECRET
+# Value must match SYNC_API_SECRET on the Vercel deployment.
+
+[observability]
+enabled = true

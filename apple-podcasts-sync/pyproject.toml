@@ -1,0 +1,23 @@
+[project]
+name = "apple-podcasts-sync"
+version = "0.1.0"
+description = "Apple Podcasts listen progress (Mac local DB) → /api/sync webhook (reading-list #322)"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx>=0.27",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["apple_podcasts_sync"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
